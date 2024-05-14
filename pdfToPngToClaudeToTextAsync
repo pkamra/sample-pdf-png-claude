@@ -1,0 +1,153 @@
+import json
+import os
+import logging
+import base64
+import boto3
+import fitz  # PyMuPDF library for PDF processing
+import re
+import concurrent.futures
+
+# Configure logging
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+
+# Initialize S3 clients
+s3_client = boto3.client('s3')
+
+# Bedrock Runtime client used to invoke and question the models
+bedrock_runtime = boto3.client(
+    service_name='bedrock-runtime', 
+    region_name='us-east-1'
+)
+
+# Retrieve the target S3 bucket from environment variables
+target_bucket = os.environ['TARGET_S3_BUCKET']
+
+def pdf_to_png(pdf_file, output_folder):
+    # Create output folder if it doesn't exist
+    if not os.path.exists(output_folder):
+        os.makedirs(output_folder)
+    
+    # Open the PDF file
+    pdf_document = fitz.open(pdf_file)
+    
+    # Iterate through each page
+    for page_num in range(len(pdf_document)):
+        # Get the page
+        page = pdf_document.load_page(page_num)
+        
+        # Render the page as an image
+        pix = page.get_pixmap(alpha=False)
+        
+        # Save the image as PNG
+        pix.save(os.path.join(output_folder, f"page_{page_num+1}.png"))
+
+    # Close the PDF document
+    pdf_document.close()
+    
+    
+# Function to extract the numeric part of the filename
+def extract_page_number(filename):
+    match = re.match(r"page_(\d+)\.png", filename)
+    if match:
+        return int(match.group(1))
+    else:
+        return float('inf')  # Return a large value for filenames that don't match the pattern
+
+
+# Function to process each image
+def process_image(image_path):
+    page_number = int(image_path.split("_")[-1].split(".")[0])
+    with open(image_path, 'rb') as f:
+        image_data = base64.b64encode(f.read()).decode('utf-8')
+
+    # Construct the JSON body
+    body = json.dumps(
+        {
+            "anthropic_version": "bedrock-2023-05-31",
+            "max_tokens": 200000,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image",
+                            "source": {
+                                "type": "base64",
+                                "media_type": "image/png",
+                                "data": image_data,
+                            },
+                        },
+                        {   "type": "text", 
+                            "text":"Please analyze the document and extract the information as it appears on the page. For textual content, provide a straightforward extraction of the information presented. Do not miss any details. For structured content such as diagrams, tables, or any other visual elements, please ensure that the relationships, connections, and relevant details are captured in the analysis. Document Analysis:- Textual Content: Provide exact textual content on the page, highlighting key points, facts, or descriptions.- Diagrams: Identify any diagrams present on the page and describe the relationships, connections, or patterns depicted in the diagrams. Include relevant labels, annotations, or titles to provide context.- Tables: If there are tables within the document, extract the data and present it in a structured format. Additionally, describe any relationships or trends observed in the table data.- Other Visual Elements: For any other visual elements such as charts, graphs, or illustrations, analyze the content to identify trends, patterns, or insights conveyed by these elements.Ensure that the analysis provides a comprehensive understanding of the information presented on the page, including both textual and visual components, while also capturing any relevant relationships or connections between different elements."
+                            
+                        },
+                    ],
+                }
+            ],
+        }
+    )
+
+    # Invoke the model (you need to replace this with your actual model invocation)
+    response = bedrock_runtime.invoke_model(
+        modelId="anthropic.claude-3-sonnet-20240229-v1:0",
+        body=body
+    )
+
+    response_body = json.loads(response.get("body").read())
+
+    # Process the response (replace this with actual processing of response)
+    logger.info("Data : %s", response_body)
+
+    # Return the processed text
+    content_text = response_body["content"][0]["text"]
+    return page_number, content_text
+
+
+def lambda_handler(event, context):
+    # Retrieve the S3 bucket and key from the event
+    source_bucket = event['Records'][0]['s3']['bucket']['name']
+    source_key = event['Records'][0]['s3']['object']['key']
+    
+    # Download the PDF file from the source bucket to /tmp directory
+    pdf_file = '/tmp/' + os.path.basename(source_key)
+    s3_client.download_file(source_bucket, source_key, pdf_file)
+    
+    # Output folder for PNG files
+    output_folder = '/tmp/png-output/'
+    
+    # Convert the PDF to PNG files
+    pdf_to_png(pdf_file, output_folder)
+    
+    # Output text file path
+    output_file_path = '/tmp/output-text-file.txt'
+
+    # Process each PNG file in the folder
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        # Get a list of PNG file paths
+        png_files = [os.path.join(output_folder, filename) for filename in os.listdir(output_folder) if filename.endswith(".png")]
+
+        # Process images and gather results
+        results = executor.map(process_image, png_files)
+
+        # Sort results by page number
+        sorted_results = sorted(results, key=lambda x: x[0])
+
+        # Write output to text file
+        with open(output_file_path, "a") as text_file:
+            for page_number, content_text in sorted_results:
+                text_file.write(f"Page Number: {page_number}\n")
+                formatted_text = "\n".join(line.strip() for line in content_text.split("\n"))
+                text_file.write(formatted_text + "\n\n")
+
+    # Upload the output text file to the target S3 bucket
+    # target_key = os.path.join('output', os.path.basename(output_file_path))
+    target_key = source_key+'.txt'
+    s3_client.upload_file(output_file_path, target_bucket, target_key)
+
+    logger.info("Processing completed.")
+    
+    return {
+        'statusCode': 200,
+        'body': json.dumps('Hello from Lambda!')
+    }
