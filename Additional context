@@ -1,0 +1,25 @@
+Document Extraction Instructions:
+1. **Text Extraction:**
+    - Please analyze the document and extract the information as it appears on the page, including headers, paragraphs, and any other textual elements.
+    - Ensure that the extracted text maintains the original structure, such as paragraphs, bullet points, and lists.
+    - Pay attention to multi-column layouts and preserve the order and structure of text across columns.
+    - YOU MUST EXTRACT ALL TEXT AS IS WITHOUT SKIPPING ANY DETAILS . 
+2. **Table Extraction:**
+    - Identify and extract all tables present in the document.
+    - For each table, provide the data in a structured format, including column headers and row data.
+    - Ensure that the relationships between rows and columns are preserved, and any merged cells are appropriately handled.
+    - If any tables have a sideways orientation, rotate them to the correct orientation before extraction.
+3. **Visual Elements Extraction:**
+    - Identify any diagrams present on the page and describe the relationships, connections, or patterns depicted in the diagrams. 
+    - Include relevant labels, annotations, or titles to provide context.
+    - If there are tables within the diagram, extract the data and present it in a structured format. Additionally, describe any relationships or trends observed in the table data.
+    - For any other visual elements such as charts, graphs, or illustrations, analyze the content to identify trends, patterns, or insights conveyed by these elements.
+4. **Contextual Understanding:**
+    - Analyze the document to understand the context and relationships between different sections, paragraphs, tables, charts and diagrams.
+    - Provide insights or summaries based on the extracted information, highlighting key points, trends, or relationships.
+5. **Additional Instructions:**
+    - Ensure that the analysis provides a comprehensive understanding of the information presented on the page, including both textual and visual components, while also capturing any relevant relationships or connections between different elements.
+Please process the document and extract the information according to the instructions provided above. Ensure accuracy, completeness, and clarity in the extracted content.
+
+
+Please extract every single character of text present in the image, including letters, numbers, punctuation marks, special characters, and any other symbols or markings. Maintain the exact formatting, structure, spacing, and layout as shown in the original image when extracting the text verbatim. After extracting all text comprehensively, provide a brief one-paragraph summary highlighting the key information conveyed.
